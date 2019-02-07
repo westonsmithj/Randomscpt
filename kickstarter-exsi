@@ -1,0 +1,65 @@
+### ESXi Installation Script
+#Modified script for use in Capstone
+#Rename this file ks.cfg/save as....ks.cfg
+#Boot the ESXi host with a VMware ESXi ISO (ISO file can be obtained from the VMware download page).
+#Press the key combination “shift + o” at boot.
+#Enter one of the following lines after runweasel:
+#For an HTTP share: ks=http://%IP_or_FQDN%/kg.cfg
+#For an HTTPs share: ks=https://%IP_or_FQDN%/kg.cfg
+#For a NFS share: ks=nfs://%IP_or_FQDN%/ks.cfg
+#for example: runweasel ks=nfs://10.1.4.1/Kickstarter/ks.cfg - if in network shared folder Kickstarter on host 10.1.4.1
+#The installation will start and use the kickstart configuration file (ks.cfg).
+#After the installation is complete the ESXi Host will reboot.
+#
+##### Stage 01 - Pre installation:
+ 
+    ### Accept the VMware End User License Agreement
+    vmaccepteula
+ 
+    ### Set the root password for the DCUI and Tech Support Mode
+    rootpw P@ssw0rd
+ 
+    ### The install media (priority: local / remote / USB)
+    install --firstdisk=local --overwritevmfs --novmfsondisk
+ 
+    ### Set the network to DHCP on the first network adapter
+    network --bootproto=static --device=vmnic0 --ip=10.1.4.220 --netmask=255.255.255.0 --gateway=10.1.4.254 --nameserver=10.1.4.1,10.1.4.2 --hostname=ESXi01.iceland.cna --addvmportgroup=0
+ 
+    ### Reboot ESXi Host
+    reboot --noeject
+ 
+##### Stage 02 - Post installation:
+ 
+    ### Open busybox and launch commands
+    %firstboot --interpreter=busybox
+ 
+    ### Set Search Domain
+    esxcli network ip dns search add --domain=Iceland.cna
+ 
+    ### Add second NIC to vSwitch0
+    esxcli network vswitch standard uplink add --uplink-name=vmnic1 --vswitch-name=vSwitch0
+ 
+    ###  Disable IPv6 support (reboot is required)
+    esxcli network ip set --ipv6-enabled=false
+ 
+    ### Add NTP Server addresses when we add one. 
+    echo "server 10.1.4.1" >> /etc/ntp.conf;
+    #echo "server 192.168.151.254" >> /etc/ntp.conf;
+ 
+    ### Allow NTP through firewall
+    esxcfg-firewall -e ntpClient
+ 
+    ### Enable NTP autostartup
+    /sbin/chkconfig ntpd on;
+ 
+    ### Rename local datastore (currently disabled because of --novmfsondisk)
+    #vim-cmd hostsvc/datastore/rename datastore1 "DAS - $(hostname -s)"
+ 
+    ### Disable CEIP
+    esxcli system settings advanced set -o /UserVars/HostClientCEIPOptIn -i 2
+ 
+    ### Enable maintaince mode
+    esxcli system maintenanceMode set -e true
+ 
+    ### Reboot
+    esxcli system shutdown reboot -d 15 -r "rebooting after ESXi host configuration"
